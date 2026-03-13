@@ -1,102 +1,335 @@
-const express = require("express");
-const fs = require("fs");
-const app = express();
+const express = require("express")
+const fs = require("fs")
+const session = require("express-session")
+const multer = require("multer")
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(__dirname));
+const app = express()
+const PORT = process.env.PORT || 3000
 
-const FILE = "posts.json";
+app.use(express.urlencoded({extended:true}))
+app.use(express.static("public"))
 
-if (!fs.existsSync(FILE)) {
-    fs.writeFileSync(FILE, "[]");
+app.use(session({
+ secret:"lumina-secret",
+ resave:false,
+ saveUninitialized:true
+}))
+
+const USERS="users.json"
+const POSTS="posts.json"
+
+if(!fs.existsSync(USERS)) fs.writeFileSync(USERS,"[]")
+if(!fs.existsSync(POSTS)) fs.writeFileSync(POSTS,"[]")
+
+function load(file){
+ return JSON.parse(fs.readFileSync(file))
 }
 
-function loadPosts() {
-    return JSON.parse(fs.readFileSync(FILE));
+function save(file,data){
+ fs.writeFileSync(file,JSON.stringify(data,null,2))
 }
 
-function savePosts(posts) {
-    fs.writeFileSync(FILE, JSON.stringify(posts, null, 2));
+const storage = multer.diskStorage({
+ destination:"public/avatars",
+ filename:(req,file,cb)=>{
+  cb(null,Date.now()+"-"+file.originalname)
+ }
+})
+
+const upload = multer({storage})
+
+function navbar(user){
+return `
+<div class="nav">
+<a href="/">Дім</a>
+${user ? `<a href="/profile">Профіль</a>`:""}
+${user ? `<a href="/logout">Вийти</a>`:`<a href="/login">Логін</a>`}
+</div>
+`
 }
 
-app.get("/", (req, res) => {
-    const posts = loadPosts();
+app.get("/",(req,res)=>{
 
-    const postsHTML = posts.map((p, index) => {
+ const posts = load(POSTS)
 
-        const commentsHTML = (p.comments || []).map(c =>
-            `<div style="margin-left:20px;">
-                <b>${c.author}</b>: ${c.text}
-            </div>`
-        ).join("");
+ const postsHTML = posts.map((p,pi)=>{
 
-        return `
-        <div class="post">
-            <b>${p.author}</b>: ${p.text}
+ const commentsHTML = (p.comments||[]).map((c,ci)=>{
 
-            <div>
-                ${commentsHTML}
-            </div>
+ const repliesHTML = (c.replies||[]).map(r=>`
+ <div class="reply">
+ <b>${r.author}</b>: ${r.text}
+ </div>
+ `).join("")
 
-            <form method="POST" action="/comment/${index}">
-                <input name="author" placeholder="Нік" required>
-                <input name="text" placeholder="Коментар" required>
-                <button>Коментувати</button>
-            </form>
-        </div>
-        `;
-    }).join("");
+ return `
+ <div class="comment">
 
-    res.send(`
-        <link rel="stylesheet" href="/style.css">
-        <div class="container">
+ <b>${c.author}</b>: ${c.text}
 
-            <h2>Новий пост</h2>
+ ${repliesHTML}
 
-            <form method="POST" action="/add">
-                <input name="author" placeholder="Ваш нік" required>
-                <textarea name="text" placeholder="Ваш пост" required></textarea>
-                <button>Додати пост</button>
-            </form>
+ <form method="POST" action="/reply/${pi}/${ci}">
+ <input name="text" placeholder="Відповідь">
+ <button>↩</button>
+ </form>
 
-            <h3>Пости</h3>
+ </div>
+ `
+ }).join("")
 
-            ${postsHTML || "<p>Постів ще немає</p>"}
+ return `
+ <div class="post">
 
-        </div>
-    `);
-});
+ <div class="post-head">
+ <img src="${p.avatar}" class="avatar">
 
-app.post("/add", (req, res) => {
+ <div>
+ <b>${p.author}</b>
+ <small>${p.date}</small>
+ </div>
 
-    const posts = loadPosts();
+ </div>
 
-    posts.push({
-        author: req.body.author,
-        text: req.body.text,
-        comments: []
-    });
+ <p>${p.text}</p>
 
-    savePosts(posts);
+ ${p.gif ? `<img src="${p.gif}" class="gif">` : ""}
 
-    res.redirect("/");
-});
+ <form method="POST" action="/like/${p.id}">
+ <button>👍 ${p.likes}</button>
+ </form>
 
-app.post("/comment/:id", (req, res) => {
+ ${commentsHTML}
 
-    const posts = loadPosts();
-    const post = posts[req.params.id];
+ <form method="POST" action="/comment/${pi}">
+ <input name="text" placeholder="Коментар">
+ <button>💬</button>
+ </form>
 
-    post.comments.push({
-        author: req.body.author,
-        text: req.body.text
-    });
+ </div>
+ `
+ }).join("")
 
-    savePosts(posts);
+ const form = req.session.user ? `
+ <form method="POST" action="/add">
 
-    res.redirect("/");
-});
+ <textarea name="text" placeholder="Що нового?"></textarea>
 
-app.listen(3000, () => {
-    console.log("Server: http://localhost:3000");
-});
+ <input name="gif" placeholder="GIF URL">
+
+ <button>Опублікувати</button>
+
+ </form>
+ `:`<p>Увійдіть щоб писати пости</p>`
+
+ res.send(`
+ <link rel="stylesheet" href="/style.css">
+
+ ${navbar(req.session.user)}
+
+ <div class="container">
+
+ <h2>Lumina</h2>
+
+ ${form}
+
+ ${postsHTML}
+
+ </div>
+ `)
+
+})
+
+app.post("/add",(req,res)=>{
+
+ if(!req.session.user) return res.redirect("/login")
+
+ const users = load(USERS)
+ const user = users.find(u=>u.name===req.session.user)
+
+ const posts = load(POSTS)
+
+ posts.unshift({
+ id:Date.now(),
+ author:req.session.user,
+ avatar:user.avatar,
+ text:req.body.text,
+ gif:req.body.gif || null,
+ date:new Date().toLocaleString(),
+ likes:0,
+ comments:[]
+ })
+
+ save(POSTS,posts)
+
+ res.redirect("/")
+
+})
+
+app.post("/like/:id",(req,res)=>{
+
+ const posts = load(POSTS)
+ const post = posts.find(p=>p.id==req.params.id)
+
+ if(post) post.likes++
+
+ save(POSTS,posts)
+
+ res.redirect("/")
+
+})
+
+app.post("/comment/:post",(req,res)=>{
+
+ if(!req.session.user) return res.redirect("/login")
+
+ const posts = load(POSTS)
+
+ posts[req.params.post].comments.push({
+ author:req.session.user,
+ text:req.body.text,
+ replies:[]
+ })
+
+ save(POSTS,posts)
+
+ res.redirect("/")
+
+})
+
+app.post("/reply/:post/:comment",(req,res)=>{
+
+ if(!req.session.user) return res.redirect("/login")
+
+ const posts = load(POSTS)
+
+ posts[req.params.post].comments[req.params.comment].replies.push({
+ author:req.session.user,
+ text:req.body.text
+ })
+
+ save(POSTS,posts)
+
+ res.redirect("/")
+
+})
+
+app.get("/login",(req,res)=>{
+
+res.send(`
+<link rel="stylesheet" href="/style.css">
+
+${navbar()}
+
+<div class="container">
+
+<h2>Логін</h2>
+
+<form method="POST">
+
+<input name="name" placeholder="нік">
+
+<input type="password" name="pass" placeholder="пароль">
+
+<button>Увійти</button>
+
+</form>
+
+<a href="/register">Реєстрація</a>
+
+</div>
+`)
+})
+
+app.post("/login",(req,res)=>{
+
+ const users = load(USERS)
+
+ const user = users.find(u =>
+ u.name===req.body.name &&
+ u.pass===req.body.pass
+ )
+
+ if(user){
+ req.session.user=user.name
+ return res.redirect("/")
+ }
+
+ res.send("Невірний логін")
+
+})
+
+app.get("/register",(req,res)=>{
+
+res.send(`
+<link rel="stylesheet" href="/style.css">
+
+${navbar()}
+
+<div class="container">
+
+<h2>Реєстрація</h2>
+
+<form method="POST" enctype="multipart/form-data">
+
+<input name="name" placeholder="нік">
+
+<input type="password" name="pass" placeholder="пароль">
+
+<input type="file" name="avatar">
+
+<button>Створити</button>
+
+</form>
+
+</div>
+`)
+})
+
+app.post("/register", upload.single("avatar"), (req,res)=>{
+
+ const users = load(USERS)
+
+ users.push({
+ name:req.body.name,
+ pass:req.body.pass,
+ avatar:req.file ? "/avatars/"+req.file.filename : "/avatars/default.png"
+ })
+
+ save(USERS,users)
+
+ res.redirect("/login")
+
+})
+
+app.get("/profile",(req,res)=>{
+
+ if(!req.session.user) return res.redirect("/login")
+
+ const users = load(USERS)
+ const user = users.find(u=>u.name===req.session.user)
+
+ res.send(`
+<link rel="stylesheet" href="/style.css">
+
+${navbar(req.session.user)}
+
+<div class="container">
+
+<h2>Профіль</h2>
+
+<img src="${user.avatar}" class="avatar-big">
+
+<p>${user.name}</p>
+
+</div>
+`)
+})
+
+app.get("/logout",(req,res)=>{
+ req.session.destroy(()=>res.redirect("/"))
+})
+
+app.listen(PORT,()=>{
+ console.log("Lumina running on "+PORT)
+})
