@@ -1,0 +1,84 @@
+body {
+  background: #0f0f0f;
+  color: white;
+  font-family: Arial, sans-serif;
+  margin: 0;
+}
+
+.nav {
+  background: #1a1a1a;
+  padding: 15px;
+  display: flex;
+  gap: 20px;
+}
+
+.nav a {
+  color: white;
+  text-decoration: none;
+}
+
+.container {
+  max-width: 700px;
+  margin: auto;
+  padding: 20px;
+}
+
+/* Пост з аватаркою та текстом */
+.post {
+  display: flex;
+  align-items: flex-start; /* аватарка по верхньому краю */
+  gap: 10px;               /* відстань між аватаркою і текстом */
+  background: #1b1b1b;
+  padding: 15px;
+  border-radius: 10px;
+  margin-top: 15px;
+}
+
+.post img.avatar {
+  width: 50px;            /* маленька ширина */
+  height: 50px;           /* маленька висота */
+  border-radius: 50%;     /* кругла аватарка */
+  object-fit: cover;      /* обрізає зображення по центру */
+  flex-shrink: 0;         /* щоб аватарка не стискалася */
+}
+
+.post .content {
+  flex: 1;                /* текст займає залишок місця */
+}
+
+/* Текстові поля та форми */
+textarea {
+  width: 100%;
+  height: 80px;
+  background: #222;
+  color: white;
+  border: none;
+  padding: 10px;
+  border-radius: 6px;
+  resize: vertical;       /* можна міняти висоту */
+}
+
+input {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  background: #222;
+  color: white;
+  border: none;
+  border-radius: 6px;
+}
+
+button {
+  margin-top: 10px;
+  padding: 10px;
+  background: #6c5cff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+button:hover {
+  background: #574bff;
+}
